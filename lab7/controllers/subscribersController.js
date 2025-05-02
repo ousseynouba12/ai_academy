@@ -1,4 +1,4 @@
-const Subscriber = require("../models/subscriber");
+const Subscriber = require("../models/subscribers");
 
 exports.getAllSubscribers = (req, res, next) => {
     Subscriber.find({})

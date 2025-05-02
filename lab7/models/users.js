@@ -1,59 +1,54 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
-const userSchema = new Schema(
-{
-name: {
-first: {
-type: String,
-trim: true
-},
-last: {
-type: String,
-trim: true
-}
-},
-email: {
-type: String,
-required: true,
-lowercase: true,
-unique: true
-},
-zipCode: {
-type: Number,
-min: [10000, "Code postal trop court"],
-max: 99999
-},
-password: {
-type: String,
+const bcrypt = require("bcrypt");
+const passportLocalMongoose = require("passport-local-mongoose"); // Ajout
 
-required: true
-},
-courses: [{ type: Schema.Types.ObjectId, ref: "Course" }],
-subscribedAccount: { type: Schema.Types.ObjectId, ref: "Subscriber" }
-},
-{
-timestamps: true
-}
+const userSchema = new Schema(
+  {
+    name: {
+      first: { type: String, trim: true },
+      last: { type: String, trim: true }
+    }, 
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      unique: true
+    },
+    zipCode: {
+      type: Number,
+      min: [10000, "Code postal trop court"],
+      max: 99999
+    },
+    password: { type: String }, // Retirez "required: true" (géré par Passport)
+    courses: [{ type: Schema.Types.ObjectId, ref: "Course" }],
+    subscribedAccount: { type: Schema.Types.ObjectId, ref: "Subscriber" }
+  },
+  { timestamps: true }
 );
+
 // Attribut virtuel pour le nom complet
 userSchema.virtual("fullName").get(function() {
-return `${this.name.first} ${this.name.last}`;
+  return `${this.name.first} ${this.name.last}`;
 });
-// Hook pre-save pour associer un abonné à l'utilisateur si les emails correspondent
-userSchema.pre("save", function(next) {
-let user = this;
-if (user.subscribedAccount === undefined) {
-mongoose.model("Subscriber").findOne({ email: user.email })
-.then(subscriber => {
-user.subscribedAccount = subscriber;
-next();
-})
-.catch(error => {
-console.log(`Erreur lors de la connexion avec l'abonné: ${error.message}`);
-next(error);
+
+// Hook pre-save pour le hashage (conservez-le si vous utilisez bcrypt manuellement)
+userSchema.pre("save", async function(next) {
+  if (this.isModified("password")) {
+    this.password = await bcrypt.hash(this.password, 10);
+  }
+  next();
 });
-} else {
-next();
-}
+
+// Plugin Passport (à ajouter APRÈS les hooks)
+userSchema.plugin(passportLocalMongoose, {
+  usernameField: "email",
+  errorMessages: {
+    UserExistsError: "Un utilisateur avec cet email existe déjà",
+    MissingPasswordError: "Mot de passe requis",
+    IncorrectPasswordError: "Mot de passe incorrect",
+    IncorrectUsernameError: "Email incorrect"
+  }
 });
+
 module.exports = mongoose.model("User", userSchema);
